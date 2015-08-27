@@ -50,6 +50,21 @@ class Foo
     }
 }
 
+
+class SubFoo extends Foo {
+    
+    public function closePrivateStaticInvalid()
+    {
+        return toCallable([__CLASS__, 'privateStaticFunction']);
+    }
+    
+    
+    public function closePrivateInvalid()
+    {
+        return toCallable([$this, 'privateInstanceFunc']);
+    }
+}
+
 class PublicInvokable
 {
     public function __invoke($param1)
@@ -67,12 +82,15 @@ class PrivateInvokable
 }
 
 $exceptionTests = [
-    [['Foo', 'privateInstanceFunc'], null],
-    ['Foo::privateInstanceFunc', null],
-    [[ new Foo, 'privateStaticFunction'], null],
-    [['Foo', 'privateStaticFunction'], null],
-    ['Foo::privateStaticFunction', null],
-    [new PrivateInvokable, null],
+
+    ['Foo', 'privateInstanceFunc'],
+    'Foo::privateInstanceFunc',
+    [ new Foo, 'privateStaticFunction'],
+    ['Foo', 'privateStaticFunction'],
+    'Foo::privateStaticFunction',
+    new PrivateInvokable,
+    [new SubFoo, 'closePrivateStaticInvalid'],
+    
 ];
 
 
@@ -85,7 +103,30 @@ $successTests = [
     [new PublicInvokable, null],
 ];
 
-$count = 0;
+
+
+
+    
+$closeOverPrivateInstanceMethod = function () {
+    $foo = new Foo;
+    return $foo->closePrivateStatic();
+};
+
+$closeOverParentPrivateInstanceMethod = function () {
+    $subFoo = new SubFoo;
+    return $subFoo->closePrivateInvalid();
+};
+
+$closureSuccessTests = [
+    $closeOverPrivateInstanceMethod,
+];
+
+$closureFailureTests = [
+    $closeOverParentPrivateInstanceMethod,
+];
+
+
+
 
 foreach ($successTests as $successTest) {
     list($callable, $scope) = $successTest;
@@ -105,10 +146,9 @@ foreach ($successTests as $successTest) {
 
 
 foreach ($exceptionTests as $exceptionTest) {
-    list($callable, $scope) = $exceptionTest;
 
     try {
-        $fn = toCallable($callable);
+        $fn = toCallable($exceptionTest);
         echo "Test failed to fail: ".var_export($exceptionTest, true)."\n";
     }
     catch (\LogicException $le) {
@@ -116,18 +156,8 @@ foreach ($exceptionTests as $exceptionTest) {
     }
 }
 
-$closeOverPrivateInstanceMethod = function () {
-    $foo = new Foo;
-    return $foo->closePrivateStatic();
-};
-
-
-$closureTests = [
-    $closeOverPrivateInstanceMethod,
-];
-
-foreach ($closureTests as $closureTest) {
-    
+$count = 0;
+foreach ($closureSuccessTests as $closureTest) {
     try {
         $fn = $closureTest();
         if (!test($fn)) {
@@ -142,8 +172,17 @@ foreach ($closureTests as $closureTest) {
 }
 
 
+$count = 0;
+foreach ($closureFailureTests as $closureFailureTest) {
+    try {
+        $fn = $closureFailureTest();
+        echo "closureFailureTest $count failed to fail.";
+    }
+    catch (\LogicException $e) {
+        //this is the expected behaviour.
+    }
+    $count++;
+}
+
+
 echo "OK";
-
-
-
-

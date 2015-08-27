@@ -1,18 +1,41 @@
 <?php
 
 
-function getCallingScope()
+class bar
 {
-    var_dump(debug_backtrace());
-    
-    exit(0);
-    return 'foo';
+
+    public function testScope()
+    {
+        return getCallingScope(0);
+    }
 }
+
+
+
+
+function getCallingScope($level)
+{
+    $requiredLevel = $level + 1;
+    $backtrace = debug_backtrace();
+
+    if (array_key_exists($requiredLevel, $backtrace) == false) {
+        throw new \LogicException("Cannot get scope of level $level.");
+    }
+
+    $levelScope = $backtrace[$requiredLevel];
+
+    if (array_key_exists('class', $levelScope)) {
+        return $levelScope['class'];
+    }
+
+    return null;
+}
+
 
 function checkCallingScopeAllowedAccess(\ReflectionMethod $reflMethod, $item) {
     
     if ($reflMethod->isPublic() == true) {
-        return true;
+        return;
     }
     
     if ($reflMethod->isProtected() == true) {
@@ -20,18 +43,34 @@ function checkCallingScopeAllowedAccess(\ReflectionMethod $reflMethod, $item) {
         echo "not implemented yet";
         exit(0);
     }
-    
-    
+
     if ($reflMethod->isPrivate() == true) {
+        $callingScope = getCallingScope(2);
+        if ($callingScope == null) {
+            throw new \LogicException("Cannot call private method from outside of class ".$item[0]." scope");
+        }
+
+        $declaringClassName = $reflMethod->getDeclaringClass()->getName();
         
-        $callingScope = getCallingScope();
         
-        $message = sprintf(
-            "Invalid callable - method %s for class %s is static, cannot be accessed from this scope",
-            $item[1],
-            $item[0]
-        );
-        throw new \LogicException($message);
+        
+        if (strcasecmp($declaringClassName, $callingScope) !== 0) {
+            
+            if (is_object($item[0])) {
+                $className = get_class($item[0]); 
+            }
+            else {
+                $className = $item[0];
+            }
+            
+            $message = sprintf(
+                "Invalid callable - method %s for class %s is private, cannot be accessed from scope '%s'",
+                $item[1],
+                $className,
+                $callingScope
+            );
+            throw new \LogicException($message);
+        }
     }
 }
 
@@ -74,15 +113,8 @@ function toCallable($item)
                 throw new \LogicException("Invalid callable - instance does not have method ".$item[1]);
             }
             $reflMethod = $reflClass->getMethod($item[1]);
-            
-            if ($reflMethod->isPrivate() == true) {
-                $message = sprintf(
-                    "Invalid callable - method %s for class %s is static, cannot be accessed from this scope",
-                    $item[1],
-                    get_class($item[0])
-                );
-                throw new \LogicException($message);
-            }
+
+            checkCallingScopeAllowedAccess($reflMethod, $item);
 
             return $reflMethod->getClosure($item[0]);
         }
